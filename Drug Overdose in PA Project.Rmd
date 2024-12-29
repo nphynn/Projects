@@ -1,0 +1,364 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-02-23"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+#There are no duplicates in dataset
+data2 <- unique(data1)
+
+colnames(data)
+unique(data$Age.Group)
+"0-14"     "All Ages" "15-24"    "25-34"    "55-64"   
+"45-54"    "35-44"    "65+"
+
+unique(data$race_group)
+"All Races"   "Black"       "Other"       "UnknownRace"
+"White"
+
+unique(data$Gender)
+"All Genders" "Female"      "Male" 
+
+unique(data$County.Name) #68 county names
+
+unique(data$Rate) #Alot
+
+unique(data$Type.of.Rate) #By Home and By Facility
+
+unique(data$Overdose.Type)
+"Any Opioid Overdose" "Any Drug Overdose"  
+"Stimulant Overdose"  "Heroin Overdose" 
+
+unique(data$Year) 
+#2016-2023 not in order and need to be ordered and identified as dates
+
+
+
+###DROP VARIABLES #####
+
+
+#Dropping due to only quartley
+unique(data$Time.Measure)
+#Dropping due to haing the year which is the focus of the study
+unique(data$Quarter.Date.Start)
+unique(data$Time.Period)
+ 
+#Dropping due to not relevant
+ $ Notes
+#Dropping due to county telling location
+ $ County.Code.Number
+ $ County.Code.Text
+ $ State.FIPS.Code
+ $ County.FIPS.Code
+ $ Latitude 
+ $ Longitude 
+ $ Georeference 
+```
+
+
+```{r}
+install.packages("caret")
+install.packages("tidyr")
+install.packages("dplyr")
+install.packages("lubridate")
+install.packages("rattle")
+install.packages("corrplot")
+library(caret)
+library(magrittr)
+library(lubridate)
+library(dplyr)
+library(caret)
+```
+
+
+```{r}
+#Data Processing
+data <- read.csv("mldata.csv")
+str(data)
+sum(is.na(data))
+
+data1 <- na.omit(data)
+data1$class <- ifelse(data1$Rate < mean(data1$Rate), 'No', 'Yes')
+data1$class <- factor(data1$class, levels = c('No','Yes'), labels = c("No","Yes"))
+
+str(data1)
+
+
+#Got rid of Georeference
+data2 <-
+  data1 %>%
+  transmute(
+    AgeGroup = factor(Age.Group), 
+    Race = factor(race_group), 
+    Gender = factor(Gender),
+    County = factor(County.Name),
+    Rate = Rate,
+    RateType = factor(Type.of.Rate),
+    OverdoseType = factor(Overdose.Type),
+    Year = factor(Year),
+    class = factor(class), 
+    CountyCode =  County.Code.Number,
+    CountyCodeText = County.Code.Text,
+    StateFIPS = State.FIPS.Code,
+    CountyFIPS = County.FIPS.Code,
+    Latitiude = Latitude,
+    Longitude = Longitude
+  )
+
+# Dropping state FIPS as its only one value for all rows
+
+data3 <-
+  data2 %>%
+  transmute(
+    AgeGroup = as.numeric(AgeGroup), 
+    Race = as.numeric(Race), 
+    Gender = as.numeric(Gender),
+    County = as.numeric(County),
+    Rate = Rate,
+    RateType = as.numeric(RateType),
+    OverdoseType = as.numeric(OverdoseType),
+    Year = as.numeric(Year),
+    class = class,
+    CountyCode = CountyCode,
+    CountyCodeText = CountyCodeText,
+    CountyFIPS = CountyFIPS,
+    Latitiude = Latitiude,
+    Longitude = Longitude
+  )
+
+plot(density(data3$Rate))
+
+lm <- lm(Rate ~ OverdoseType, data=data3)
+residlm <- resid(lm)
+tapply(data3$Rate, data3$OverdoseType, var)
+```
+
+
+```{r}
+#Feature Selection - Correlation
+
+data4 <-
+  data3 %>%
+  mutate(
+    class = as.numeric(class))
+
+
+#Only selecting Rate, Rate Type, Oversdose Type, AgeGroup, Gender, County
+library(corrplot)
+cor = cor(data4[,]) # inputs must be in numeric data type...
+#install.packages('corrplot')
+corrplot(cor)
+
+data5 <-
+  data3 %>%
+  transmute(
+    AgeGroup = AgeGroup, 
+    Gender = Gender,
+    County = County,
+    Rate = Rate,
+    RateType = RateType,
+    OverdoseType = OverdoseType,
+    class = class,
+    Latitiude = Latitiude,
+    Longitude = Longitude
+    )
+```
+
+
+```{r}
+#Scale
+preProClean <- preProcess(x = data5, method = c("pca"))
+data6 <- predict(preProClean, data5 %>% na.omit)
+print(str(data))
+
+```
+
+##Split Data Into Traning & Test Data Sets
+
+```{r}
+#Data Omit
+index <- createDataPartition(data3$class, p =0.70, list = FALSE)
+training <- data3[index,]
+dim(training)
+valid <- data3[-index,]
+dim(valid)
+
+#Feature Selection Data
+index1 <- createDataPartition(data5$class, p =0.70, list = FALSE)
+training1 <- data5[index1,]
+dim(training1)
+valid1 <- data5[-index1,]
+dim(valid1)
+
+
+#PCA Data
+index2 <- createDataPartition(data6$class, p =0.70, list = FALSE)
+training2 <- data6[index2,]
+dim(training2)
+valid2 <- data6[-index2,]
+dim(valid2)
+```
+
+
+```{r}
+#Create harness
+control <- trainControl(method="cv", number=10)
+metric <- "Accuracy"
+```
+
+
+##Train Models (3 models for comparison)
+
+##Data Processing
+
+```{r}
+#Decision Tree
+set.seed(7) 
+fit.rpart <- train(class~., data = training, method ="rpart", metric = metric, trControl = control) 
+fit.rpart 
+summary(fit.rpart$finalModel)
+suppressMessages(library(rattle)) 
+fancyRpartPlot(fit.rpart$finalModel) 
+data.pred = predict(fit.rpart, newdata = valid) 
+round(mean(data.pred != valid$class,2)) 
+confusionMatrix(as.factor(data.pred), reference = as.factor(valid$class), mode = "prec_recall") 
+
+
+#Naive Bayes
+set.seed(7)
+fit.nb <- train(class~., data = training, method="naive_bayes", metric = metric, trControl = control)
+fit.nb
+summary(fit.nb$finalModel)
+data.pred1 <- predict(fit.nb, newdata = valid)
+error.rate <- round(mean(data.pred1 != valid$class,2))
+confusionMatrix(as.factor(data.pred1), reference = as.factor(valid$class), mode = "prec_recall")
+plot(fit.nb)
+
+#SVM
+set.seed(7)
+fit.svm <- train(class~., data = training, method = "svmLinear", family=binomial(), trControl=control, metric=metric)
+fit.svm
+data.pred2 <- predict(fit.svm, newdata = valid)
+round(mean(data.pred2 != valid$class,2))
+confusionMatrix(as.factor(data.pred2), reference = as.factor(valid$class), mode = "prec_recall")
+
+plot(fit.svm)
+
+#Model Comparison
+results <- resamples(list(dt = fit.rpart, nb = fit.nb, svm = fit.svm))
+summary(results)
+dotplot(results)
+```
+
+
+
+##Feature Selection
+
+```{r}
+#Decision Tree
+set.seed(7) 
+fit.rpart1 <- train(class~., data = training1, method ="rpart", metric = metric, trControl = control) 
+fit.rpart1
+summary(fit.rpar1t$finalModel)
+suppressMessages(library(rattle)) 
+fancyRpartPlot(fit.rpart1$finalModel) 
+data.pred3 = predict(fit.rpart1, newdata = valid1) 
+round(mean(data.pred != valid1$class,2)) 
+confusionMatrix(as.factor(data.pred3), reference = as.factor(valid1$class), mode = "prec_recall") 
+
+
+#Naives Bayes
+set.seed(7)
+fit.nb1 <- train(class~., data = training1, method="naive_bayes", metric = metric, trControl = control)
+fit.nb1
+summary(fit.nb1$finalModel)
+data.pred4 <- predict(fit.nb1, newdata = valid1)
+round(mean(data.pred4 != valid1$class,2))
+confusionMatrix(as.factor(data.pred4), reference = as.factor(valid1$class), mode = "prec_recall")
+plot(fit.nb1)
+
+#SVM
+set.seed(7)
+fit.svm1 <- train(class~., data = training1, method = "svmLinear", family=binomial(), trControl=control, metric=metric)
+fit.svm1
+data.pred5 <- predict(fit.svm1, newdata = valid1)
+round(mean(data.pred5 != valid1$class,2))
+confusionMatrix(as.factor(data.pred5), reference = as.factor(valid1$class), mode = "prec_recall")
+plot(fit.svm1)
+
+#Model Comparison
+results1 <- resamples(list(dt = fit.rpart1, nb = fit.nb1, svm = fit.svm1))
+summary(results1)
+dotplot(results1)
+```
+
+
+##Feature Enginerring
+
+```{r}
+#Decision Tree
+set.seed(7) 
+fit.rpart2 <- train(class~., data = training2, method ="rpart", metric = metric, trControl = control) 
+fit.rpart2
+summary(fit.rpart2$finalModel)
+data.pred6 = predict(fit.rpart2, newdata = valid2) 
+round(mean(data.pred6 != valid2$class,2)) 
+confusionMatrix(as.factor(data.pred6), reference = as.factor(valid2$class), mode = "prec_recall")
+suppressMessages(library(rattle)) 
+fancyRpartPlot(fit.rpart2$finalModel) 
+
+
+#Naives Bayes
+set.seed(7)
+fit.nb2 <- train(class~., data = training2, method="naive_bayes", metric = metric, trControl = control)
+fit.nb2
+summary(fit.nb2$finalModel)
+data.pred7 <- predict(fit.nb2, newdata = valid2)
+round(mean(data.pred7 != valid2$class,2))
+confusionMatrix(as.factor(data.pred7), reference = as.factor(valid2$class), mode = "prec_recall")
+plot(fit.nb2)
+
+#SVM
+set.seed(7)
+fit.svm2 <- train(class~., data = training2, method = "svmLinear", family=binomial(), trControl=control, metric=metric)
+fit.svm2
+data.pred8 <- predict(fit.svm2, newdata = valid2)
+round(mean(data.pred8 != valid2$class,2))
+confusionMatrix(as.factor(data.pred8), reference = as.factor(valid2$class), mode = "prec_recall")
+plot(fit.svm2)
+
+#Model Comparison
+results2 <- resamples(list(dt = fit.rpart2, nb = fit.nb2, svm = fit.svm2))
+summary(results2)
+dotplot(results2)
+```
+
+#Variable Importance for Top Three Model
+
+```{r}
+vi = varImp(fit.rpart2, scale = FALSE)
+plot(vi, top = ncol(data6)-1)
+
+vi1 = varImp(fit.nb2, scale = FALSE)
+plot(vi1, top = ncol(data6)-1)
+
+vi2 = varImp(fit.svm2, scale = FALSE)
+plot(vi2, top = ncol(data6)-1)
+```
+
+
+
+
