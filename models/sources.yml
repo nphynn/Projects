@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+    - name: jaffle_shop
+      description: replica of the Postgres database used by dbt
+      database: df1
+      schema: jaffle_shop
+      tables:
+          - name: customers
+            description: One record per customer.
+          - name: orders
+            description: One record per order. Includes cancelled and deleted orders.

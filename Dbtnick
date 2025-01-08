@@ -1,0 +1,1 @@
+select * from df1.jaffle_shop.customers
