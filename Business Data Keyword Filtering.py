@@ -9,7 +9,6 @@ and retaining only those related to dry cleaning or laundromats. The script:
 2. Excludes rows with unwanted keywords across all columns.
 3. Filters relevant rows based on specific keywords in the 'Location Name' column.
 4. Saves both filtered and excluded data into separate Excel files.
-"""
 
 # Libraries
 import pandas as pd
